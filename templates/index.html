@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SeisNAV</title>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: #fff;
+        }
+
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+
+        /* Logo Styling */
+        #logo {
+            position: absolute;
+            top: 50px;
+            left: 50px;
+            width: 120px;
+            height: auto;
+            z-index: 10;
+        }
+
+        .mapbox-button {
+            position: absolute;
+            bottom: 80px;
+            z-index: 1;
+            padding: 16px 48px;
+            font-size: 24px;
+            background-color: #a8a8a880;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.3);
+            transition: background-color 0.2s ease;
+        }
+
+        .mapbox-button:hover {
+            background-color: #666;
+        }
+
+        #calculate-path-btn { 
+            bottom: 30px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+        }
+
+        #layers-btn {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            background-color: #a8a8a880;
+            color: #fff;
+            border: none;
+            border-radius: 50%;
+            width: 64px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            cursor: pointer;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Popup Container */
+        #layers-popup {
+            position: absolute;
+            bottom: 100px;
+            right: 30px;
+            background-color: #333;
+            padding: 5px;
+            border-radius: 16px;
+            display: none;
+            box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Popup Buttons */
+        #layers-popup button {
+            display: block;
+            background-color: #444;
+            color: #fff;
+            border: none;
+            border-radius: 20px;
+            padding: 24px;
+            margin: 16px;
+            width: 240px;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        #layers-popup button:hover {
+            background-color: #666;
+        }
+
+    </style>
+</head>
+<body>
+    <!-- Logo Image -->
+    <img src="https://i.ibb.co/Yk6kPMH/logo.png" alt="SeisNAV Logo" id="logo">
+
+    <div id="map"></div>
+    <button id="calculate-path-btn" class="mapbox-button">Calculate Shortest Path</button>
+    
+    <!-- Layers Button -->
+    <button id="layers-btn">+</button>
+    
+    <!-- Popup with Layer Options -->
+    <div id="layers-popup">
+        <button id="toggle-collapsed-btn-popup">Collapsed Buildings</button>
+        <button id="toggle-red-circles-btn-popup">Emergency Shelter</button>
+        <button id="toggle-green-circles-btn-popup">Food Supply</button>
+        <button id="toggle-yellow-circles-btn-popup">First Aid</button>
+
+        <!-- "Images" Button to toggle GeoTIFF layers -->
+        <button id="toggle-images-btn-popup">Satellite Images</button>
+    </div>
+
+    <script>
+        mapboxgl.accessToken = 'pk.eyJ1IjoiZXJ0dWdydWxha2RlbWlyIiwiYSI6ImNtNDhvOWIwcDAxa3Uyc3I2OW9xMmcyejQifQ.yHQkT4KBp8kzyf2YQDQQlQ';
+
+        const map = new mapboxgl.Map({
+            container: 'map',
+            style: 'mapbox://styles/mapbox/dark-v11', // Default map style
+            center: [36.6200, 37.0180],
+            zoom: 13
+        });
+
+        const circleRadius = 15; // Radius in meters
+        const colors = ['#FF6347', '#32CD32', '#FFD700']; // Red, Green, Yellow
+        let collapsedLayerVisible = false;
+        
+        // GeoTIFF tileset URLs from your Mapbox account
+        const tilesets = [
+            'mapbox://ertugrulakdemir.cgwxo0yp',
+            'mapbox://ertugrulakdemir.cfpwci28',
+            'mapbox://ertugrulakdemir.bruhc1ng',
+            'mapbox://ertugrulakdemir.0tzp9ume',
+            'mapbox://ertugrulakdemir.8e2a6u6g',
+            'mapbox://ertugrulakdemir.29d9mawi',
+            'mapbox://ertugrulakdemir.7ari99vl',
+            'mapbox://ertugrulakdemir.akn126wn',
+            'mapbox://ertugrulakdemir.1bp5o9nc',
+
+             // Replace with your actual Mapbox Tileset URLs
+        ];
+
+        let imagesVisible = false;
+
+        // Function to toggle visibility of GeoTIFF layers (tilesets)
+        function toggleImages() {
+            imagesVisible = !imagesVisible;
+            tilesets.forEach((tileset, index) => {
+                if (imagesVisible) {
+                    map.addSource(`tileset-${index}`, {
+                        type: 'raster',
+                        url: tileset,
+                        tileSize: 256
+                    });
+                    map.addLayer({
+                        id: `tileset-layer-${index}`,
+                        type: 'raster',
+                        source: `tileset-${index}`,
+                        paint: {
+                            'raster-opacity': 0.6 // Adjust opacity as needed
+                        }
+                    });
+                } else {
+                    if (map.getLayer(`tileset-layer-${index}`)) {
+                        map.removeLayer(`tileset-layer-${index}`);
+                        map.removeSource(`tileset-${index}`);
+                    }
+                }
+            });
+        }
+
+        // Set up "Images" button to toggle visibility
+        document.getElementById('toggle-images-btn-popup').addEventListener('click', () => {
+            toggleImages();
+        });
+
+        // Draggable start and end markers
+        let startMarker = new mapboxgl.Marker({ draggable: true, color: '#309fff' })
+            .setLngLat([36.6100, 37.0000]) // Starting marker position
+            .addTo(map);
+
+        let endMarker = new mapboxgl.Marker({ draggable: true, color: 'red' })
+            .setLngLat([36.6500, 37.0300]) // Ending marker position
+            .addTo(map);
+
+        // Function to calculate and display the shortest path
+        document.getElementById("calculate-path-btn").addEventListener("click", () => {
+            const startCoords = startMarker.getLngLat();
+            const endCoords = endMarker.getLngLat();
+
+            // Fetch shortest path data from the backend
+            fetch('/shortest-path', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    start: [startCoords.lng, startCoords.lat],
+                    end: [endCoords.lng, endCoords.lat],
+                }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                    return;
+                }
+
+                // Process the path coordinates
+                const path = data.path.map(coord => [coord[0], coord[1]]);
+
+                // Add or update the shortest path on the map
+                if (map.getSource("shortest-path")) {
+                    map.getSource("shortest-path").setData({
+                        type: "Feature",
+                        geometry: { type: "LineString", coordinates: path },
+                    });
+                } else {
+                    map.addSource("shortest-path", {
+                        type: "geojson",
+                        data: {
+                            type: "Feature",
+                            geometry: { type: "LineString", coordinates: path },
+                        },
+                    });
+
+                    map.addLayer({
+                        id: "shortest-path",
+                        type: "line",
+                        source: "shortest-path",
+                        paint: {
+                            "line-color": "#FFFFFF", // Green line for the path
+                            "line-width": 4
+                        }
+                    });
+                }
+            })
+            .catch(error => {
+                console.error("Error fetching the shortest path:", error);
+                alert("An error occurred while calculating the path. Please try again.");
+            });
+        });
+
+        // Colored Circles
+        function generateCirclesFurtherFromCollapsedBuildings(collapsedBuildings) {
+            const circles = [];
+
+            collapsedBuildings.features.forEach((feature, index) => {
+                const outerBuffer = turf.buffer(feature, 1000, { units: 'meters' });
+                const innerBuffer = turf.buffer(feature, 500, { units: 'meters' });
+                const difference = turf.difference(outerBuffer, innerBuffer);
+
+                if (difference) {
+                    const randomPoint = turf.randomPoint(1, { bbox: turf.bbox(difference) }).features[0];
+
+                    if (!turf.booleanPointInPolygon(randomPoint, feature)) {
+                        const circle = turf.circle(randomPoint.geometry.coordinates, circleRadius, {
+                            steps: 64, units: 'meters'
+                        });
+
+                        const features = map.queryRenderedFeatures(map.project(randomPoint.geometry.coordinates), { layers: ['road'] });
+
+                        if (features.length === 0) {
+                            circle.properties = { color: colors[index % colors.length] };
+                            circles.push(circle);
+                        }
+                    }
+                }
+            });
+
+            localStorage.setItem('circles', JSON.stringify(circles));
+
+            return turf.featureCollection(circles);
+        }
+
+        // Add Circles Layer from localStorage
+        function loadCircles() {
+            const savedCircles = localStorage.getItem('circles');
+            if (savedCircles) {
+                const circles = JSON.parse(savedCircles);
+                map.addSource('random-circles', { type: 'geojson', data: turf.featureCollection(circles) });
+                map.addLayer({
+                    id: 'random-circles-layer',
+                    type: 'fill',
+                    source: 'random-circles',
+                    paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0 }
+                });
+
+                addCircleLayers(circles);
+            } else {
+                loadCollapsedPolygons(collapsedBuildings => {
+                    const circles = generateCirclesFurtherFromCollapsedBuildings(collapsedBuildings);
+                    map.addSource('random-circles', { type: 'geojson', data: circles });
+                    map.addLayer({
+                        id: 'random-circles-layer',
+                        type: 'fill',
+                        source: 'random-circles',
+                        paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0 }
+                    });
+
+                    addCircleLayers(circles);
+                });
+            }
+        }
+
+        function addCircleLayers(circles) {
+            const redCircles = circles.filter(circle => circle.properties.color === '#FF6347');
+            const greenCircles = circles.filter(circle => circle.properties.color === '#32CD32');
+            const yellowCircles = circles.filter(circle => circle.properties.color === '#FFD700');
+
+            map.addSource('red-circles', { type: 'geojson', data: turf.featureCollection(redCircles) });
+            map.addLayer({
+                id: 'red-circles-layer',
+                type: 'fill',
+                source: 'red-circles',
+                paint: { 'fill-color': '#FF6347', 'fill-opacity': 1 },
+                layout: { visibility: 'none' }
+            });
+
+            map.addSource('green-circles', { type: 'geojson', data: turf.featureCollection(greenCircles) });
+            map.addLayer({
+                id: 'green-circles-layer',
+                type: 'fill',
+                source: 'green-circles',
+                paint: { 'fill-color': '#32CD32', 'fill-opacity': 1 },
+                layout: { visibility: 'none' }
+            });
+
+            map.addSource('yellow-circles', { type: 'geojson', data: turf.featureCollection(yellowCircles) });
+            map.addLayer({
+                id: 'yellow-circles-layer',
+                type: 'fill',
+                source: 'yellow-circles',
+                paint: { 'fill-color': '#FFD700', 'fill-opacity': 1 },
+                layout: { visibility: 'none' }
+            });
+        }
+
+        // Toggle Circles by Color
+        document.getElementById('toggle-red-circles-btn-popup').addEventListener('click', () => {
+            toggleCircleLayer('red-circles-layer');
+        });
+
+        document.getElementById('toggle-green-circles-btn-popup').addEventListener('click', () => {
+            toggleCircleLayer('green-circles-layer');
+        });
+
+        document.getElementById('toggle-yellow-circles-btn-popup').addEventListener('click', () => {
+            toggleCircleLayer('yellow-circles-layer');
+        });
+
+        function toggleCircleLayer(layerId) {
+            const currentVisibility = map.getLayoutProperty(layerId, 'visibility');
+            const newVisibility = currentVisibility === 'visible' ? 'none' : 'visible';
+            map.setLayoutProperty(layerId, 'visibility', newVisibility);
+        }
+
+        // Collapsed Buildings Layer
+        function loadCollapsedPolygons(callback) {
+            fetch('/collapsed-polygons') // Replace with your collapsed buildings endpoint
+                .then(response => response.json())
+                .then(data => {
+                    map.addSource('collapsed-polygons', { type: 'geojson', data });
+                    map.addLayer({
+                        id: 'collapsed-polygons',
+                        type: 'fill',
+                        source: 'collapsed-polygons',
+                        paint: { 'fill-color': '#FF0000', 'fill-opacity': 0.3 },
+                        layout: { visibility: collapsedLayerVisible ? 'visible' : 'none' }
+                    });
+                    callback(data); // Pass collapsed polygons to callback
+                });
+        }
+
+        // Toggle Collapsed Buildings Layer
+        function toggleCollapsedBuildings() {
+            if (!map.getLayer('collapsed-polygons')) {
+                loadCollapsedPolygons(() => {
+                    collapsedLayerVisible = true;
+                    document.getElementById('toggle-collapsed-btn-popup').innerText = 'Hide Collapsed Buildings';
+                });
+            } else {
+                collapsedLayerVisible = !collapsedLayerVisible;
+                map.setLayoutProperty('collapsed-polygons', 'visibility', collapsedLayerVisible ? 'visible' : 'none');
+                document.getElementById('toggle-collapsed-btn-popup').innerText = collapsedLayerVisible
+                    ? 'Hide Collapsed Buildings'
+                    : 'Show Collapsed Buildings';
+            }
+        }
+
+        // Show/hide the popup when the "Layers" button is clicked
+        document.getElementById('layers-btn').addEventListener('click', () => {
+            const popup = document.getElementById('layers-popup');
+            popup.style.display = (popup.style.display === 'block') ? 'none' : 'block';
+        });
+
+        map.on('load', () => {
+            loadCircles(); // Load circles from localStorage or generate them
+        });
+
+        // Assign collapsed building layer toggle to the popup button
+        document.getElementById('toggle-collapsed-btn-popup').addEventListener('click', () => {
+            toggleCollapsedBuildings();
+        });
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+    "bounding_box": {
+        "left": 290239.2578125,
+        "bottom": 4099924.9267578125,
+        "right": 290489.19677734375,
+        "top": 4100174.560546875
+    },
+    "crs": "PROJCS[\"WGS 84 / UTM zone 37N\",GEOGCS[\"WGS 84\",DATUM[\"World Geodetic System 1984\",SPHEROID[\"WGS 84\",6378137,298.257223563]],PRIMEM[\"Greenwich\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"latitude_of_origin\",0],PARAMETER[\"central_meridian\",39],PARAMETER[\"scale_factor\",0.9996],PARAMETER[\"false_easting\",500000],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
+    "resolution": {
+        "x": 0.30517578125,
+        "y": 0.30517578125
+    },
+    "dimensions": {
+        "width": 819,
+        "height": 818
+    }
+}
